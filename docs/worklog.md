@@ -66,5 +66,16 @@
 | 무시 규칙 적용 | `git check-ignore -v` | `node_modules/`(2곳), `backend-express/data/board.sqlite`(`data/` 규칙), `.DS_Store` 제외 확인 |
 | `.env.example` 포함 | 후보 목록 검색 | `backend-express/.env.example` 포함됨 |
 
-### 첫 커밋
-- 커밋 ID: (사용자 확인 후 기록)
+### 사용하지 않는 템플릿 삭제
+- 사용자 요청으로 `frontend-vue/`, `backend-fastapi/`, `backend-spring/` 삭제 (사용자가 별도 백업 보유)
+- 삭제 후 `git add -A --dry-run` 결과: 커밋 후보 31개 (위 표의 64개는 삭제 전 수치)
+
+### 커밋 (사용자 요청으로 두 번에 나눔)
+| 커밋 | ID | 내용 |
+|---|---|---|
+| `chore: 시작 코드 원본` | `8fcb0e7747866b189eb46ef2bae7857282796fea` | 제공 파일 29개 + 원래 9줄 `.gitignore` (보완본과 worklog 제외) — 제공 코드 원본 기준점 |
+| `chore: .gitignore 보완과 작업 기록 추가` | `1435191ebf71aba3ca0dfb24bb516d02cb9ff0c1` | 보완한 `.gitignore`(+11줄), `docs/worklog.md` |
+
+- 첫 커밋 방법: 보완한 `.gitignore`를 임시 보관 → 앞 9줄만 남긴 상태로 `git add -A` 후 `docs/worklog.md` 스테이징 해제 → 커밋 → 보완본 복원
+- 확인: 각 커밋 전 `git status --short`로 대상 확인, `git diff --cached --name-only`에서 `.env`, `node_modules`, `data/`, `dist/`, `*.sqlite` 검색 → 두 커밋 모두 해당 없음
+- 이 커밋 ID 기록은 세 번째 커밋 `docs: 커밋 ID 기록`으로 남김
