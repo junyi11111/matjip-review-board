@@ -300,3 +300,6 @@
 - `request()`의 TODO FE-03(401 시 세션 해제)은 이번 범위가 아님 → 토큰 만료 후에도 화면에는 "○○님 로그인 중"이 남는다(미확인, FE-03에서 처리 예정).
 - `canEdit`가 항상 true라 Bob에게도 Alice 글의 수정·삭제 버튼이 보인다(서버가 403으로 막음). FE-04 범위.
 - 빌드본(`npm run build`/`preview`)에서의 동작: 미확인.
+
+### FE-01, FE-02 커밋
+- `feat(FE-01,FE-02): 로그인 연결과 토큰 전송 구현` — `e0c4b4e73c21e71d69447d617c2f2173f09dcabf` (`frontend-react/src/api.js`, worklog 5단계 기록. `.env`는 `git status --ignored`에서 `!!`로 제외 확인, 스테이징 diff에 실제 키·토큰 원문 없음 확인)
