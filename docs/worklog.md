@@ -253,3 +253,50 @@
 ### BE-03 커밋
 - `feat(BE-03): 작성자 권한 검사 구현` — `e0faac9b96721d06e9157e3797cbf4fe5b3e479d` (`auth.js`, worklog 4단계 기록. `.env`는 `git status --ignored`에서 `!!`로 제외 확인, 스테이징 diff에 실제 키·토큰 원문 없음 확인)
 - 자동 검사 결과(커밋 대상 코드로 실행): `check_api.py --mode final` 40건 모두 통과(exit 0), `--mode final --expiry`(`TOKEN_TTL=3` 서버) 48건 모두 통과(exit 0). 백엔드 BE-01~03 완료.
+
+---
+
+## 2026-10-28 · 5단계: FE-01 로그인 상태 연결, FE-02 토큰 첨부 (커밋 전)
+
+### 수정한 파일과 함수: `frontend-react/src/api.js`
+**`authorizationHeaders()` (FE-02)**
+- 원래 역할: TODO와 함께 항상 빈 객체 `{}` 반환 → 어떤 요청에도 토큰이 붙지 않음.
+- 변경: `session.accessToken`이 있을 때만 `{ Authorization: "Bearer <토큰>" }`, 없으면 `{}`. 토큰이 없을 때 헤더 키 자체가 생기지 않아 `Bearer undefined`가 나갈 수 없다.
+- 공개 목록·상세: 사용자 결정으로 `request()` 구조를 그대로 둠. 로그인 상태에서는 목록·상세에도 토큰이 붙지만 서버 GET 라우트는 토큰을 읽지 않으므로 동작 차이 없음. 로그아웃 상태에서는 헤더 없이 조회.
+
+**`login(email, password)` (FE-01)**
+- 원래 역할: TODO와 함께 즉시 예외("로그인 연결은 학생 구현 항목입니다…")를 던져 서버에 요청하지 않음.
+- 변경: `clearSession()`을 먼저 호출한 뒤 `request("/auth/login", {method:"POST", body: JSON.stringify({email, password})})`. 성공하면 `session = {accessToken, user}`로 모듈 변수(메모리)에만 저장하고 `user` 반환. 실패하면 `request()`가 서버의 `message`로 오류를 던진다.
+- `clearSession()`을 먼저 부르는 이유: (1) 기존 사용자 토큰이 로그인 요청에 붙지 않게, (2) 로그인 실패 시 이전 사용자 화면이 남지 않고 로그아웃 상태가 되게.
+- localStorage/sessionStorage 미사용, 디버깅용 console 출력 없음.
+- 출처: AI가 작성 (공개 조회 토큰 처리 방식은 사용자가 기본안으로 결정)
+
+**수정하지 않은 파일**: `main.jsx`. 로그인 폼 `onSubmit` → `run(() => login(...))`, `run()`의 `catch`가 `setMessage(e.message)`로 오류 표시, `finally`가 `setUser(getSession().user)`로 로그인 표시("○○님 로그인 중"/"로그아웃 상태")를 이미 연결하고 있어 FE-01에 필요한 변경이 없었다. 테스트 계정 미리 입력도 그대로 둠(사용자 요청).
+
+### 실제로 실행한 확인과 결과
+백엔드(`npm start`)와 Vite 개발 서버(`npm run dev`, 5173)를 띄우고 Playwright 브라우저로 화면을 조작. 요청마다 브라우저가 실제로 보낸 `Authorization` 헤더를 기록(토큰은 앞 10자 + payload의 sub만 표시). `alert`/`confirm`은 시험 페이지 안에서만 기록용 함수로 대체(소스 수정 아님).
+
+| 단계 | 화면 | 요청 → 응답 | Authorization 헤더 |
+|---|---|---|---|
+| 첫 로드 | "로그아웃 상태" | GET /api/posts → 200 | 없음 |
+| 틀린 비밀번호 | 상태 "이메일 또는 비밀번호를 확인하세요." / "로그아웃 상태" | POST /api/auth/login → 401 | 없음 |
+| Alice 로그인 | 상태 "로그인했습니다." / "Alice님 로그인 중" | POST /api/auth/login → 200 | 없음 |
+| Alice 내 정보 조회 | alert "Alice (alice@class.test)" | GET /api/me → 200 | Bearer (sub=1) |
+| Alice 글 등록 | "게시글을 저장했습니다." | POST /api/posts → 201, 이어서 GET /api/posts → 200 | Bearer (sub=1) |
+| Alice 상세·수정 | "게시글을 저장했습니다." | GET /api/posts/12 → 200, PUT /api/posts/12 → 200 | Bearer (sub=1) |
+| 로그인 상태에서 틀린 비밀번호 | 오류 메시지 / "로그아웃 상태"로 바뀜 | POST /api/auth/login → 401 | 없음 |
+| Alice 재로그인 → Bob 로그인 | "Bob님 로그인 중" | POST /api/auth/login → 200 (두 번) | 없음 (Alice 로그인 상태에서 보낸 Bob 로그인 요청에도 없음) |
+| Bob 내 정보 조회 | alert "Bob (bob@class.test)" | GET /api/me → 200 | Bearer (sub=2) |
+| Bob이 Alice 글 삭제 | 상태 "본인이 작성한 글만 수정·삭제할 수 있습니다." | DELETE /api/posts/12 → 403 | Bearer (sub=2) |
+| 새로고침 | "로그아웃 상태" (메모리 저장이므로 해제) | GET /api/posts → 200 | 없음 |
+| 로그아웃 상태 상세 | 상세 제목 표시, "게시글을 불러왔습니다." | GET /api/posts/12 → 200 | 없음 |
+
+- 토큰 노출: 화면 본문에 `eyJ` 문자열 없음. 브라우저 콘솔 전체(debug 수준 포함)에 토큰 출력 없음 — 콘솔 오류는 favicon 404와 의도한 401·403 요청 실패 표시뿐.
+- 저장소: 브라우저 `localStorage`·`sessionStorage` 항목 수 0. `frontend-react/src`에서 `localStorage|sessionStorage|console.log/debug/info` 검색 결과 없음.
+- 첫 번째 Playwright 실행은 alert 처리 방식 문제로 결과 문자열을 돌려받지 못함. 그 실행이 만든 시험 글(id 11)을 확인하고, 같은 시나리오를 alert/confirm 대체 방식으로 다시 실행해 위 결과를 얻음.
+- 정리: 시험 글 id 11, 12를 Alice 토큰으로 삭제(각 204), 이후 `GET /api/posts` → `[]`. 백엔드·Vite 서버 종료, 8000·5173 포트 비어 있음 확인.
+
+### 남은 한계와 미확인
+- `request()`의 TODO FE-03(401 시 세션 해제)은 이번 범위가 아님 → 토큰 만료 후에도 화면에는 "○○님 로그인 중"이 남는다(미확인, FE-03에서 처리 예정).
+- `canEdit`가 항상 true라 Bob에게도 Alice 글의 수정·삭제 버튼이 보인다(서버가 403으로 막음). FE-04 범위.
+- 빌드본(`npm run build`/`preview`)에서의 동작: 미확인.
