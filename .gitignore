@@ -7,3 +7,14 @@ target/
 data/
 .env
 .DS_Store
+# SQLite DB (DB_FILE 경로를 바꿔도 제외)
+*.sqlite
+*.sqlite.tmp
+# 환경 변수 파일 변형 (예시 파일은 커밋)
+.env.*
+!.env.example
+# 로그와 에디터 설정
+*.log
+npm-debug.log*
+.idea/
+.vscode/
