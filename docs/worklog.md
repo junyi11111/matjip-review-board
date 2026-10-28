@@ -197,3 +197,55 @@
 
 ### BE-02 커밋
 - `feat(BE-02): JWT 검증과 사용자 확인 구현` — `c505e8848a834bbdfb49d22516c8b6f5407850f4` (`auth.js`, worklog 3단계 기록. `.env`는 `git status --ignored`에서 `!!`로 제외 확인, 스테이징 diff에 실제 키·토큰 원문 없음 확인)
+
+---
+
+## 2026-10-28 · 4단계: BE-03 작성자 권한 (커밋 전)
+
+### 수정한 파일과 함수: `backend-express/src/auth.js` — `assertOwner(userId, authorId)`
+- 원래 역할: TODO BE-03 주석만 있는 빈 함수. 누구나 모든 글을 수정·삭제할 수 있었다.
+- 변경 내용과 이유: `userId !== authorId`이면 `ApiError(403, "FORBIDDEN", ...)`를 던진다. `userId`는 BE-02에서 검증된 숫자 ID, `authorId`는 DB에 저장된 글의 작성자 ID이므로 요청 본문이나 토큰 내용을 직접 믿지 않는다. 두 값이 모두 number임을 확인한 뒤 엄격 비교(`!==`) 사용.
+- 출처: AI가 작성
+
+**수정하지 않은 파일(확인만 함)**
+- `app.js` `POST /api/posts`: 작성자 ID는 `currentUserId(req)` 결과로 결정. `fields()`가 `title`, `content` 외의 키를 400으로 거부하므로 본문의 `authorId`/`userId`는 반영될 수 없다.
+- `app.js` `PUT`/`DELETE /api/posts/:id`: `currentUserId`(401) → `postId`(ID 형식 400) → `getPost`(404) → `assertOwner`(403) → `fields`(PUT만, 400) → `store.update`/`store.remove`. 명세의 인증 → 글 존재 → 권한 → 입력 검증 → 변경 순서와 일치. 깨진 JSON은 `express.json()`이 라우트 전에 400 처리(명세에서 허용).
+- `store.js` `update`: `UPDATE posts SET title=?,content=?,updated_at=?`만 실행하므로 `author_id`, `created_at`은 바뀌지 않는다.
+
+### 실제로 실행한 확인과 결과
+**타입 확인**: 코드 수정 없이 `auth.js`·`store.js`를 직접 import하는 임시 스크립트를 실제 DB의 **사본**으로 실행(`DB_FILE=<사본>`, `node --env-file=.env`). `userId = 1 typeof number`, `authorId = 1 typeof number`, `userId === authorId: true`. 실행 전후 실제 `data/board.sqlite`의 md5 동일, 사본은 삭제.
+
+**수동 시험** (토큰 원문 미출력)
+| 요청 | 결과 |
+|---|---|
+| Alice 글 생성 | 201, `authorId: 1` |
+| Bob → Alice 글 수정 / 삭제 | 둘 다 403 `FORBIDDEN` |
+| Bob → Alice 글에 공백 제목 | 403 `FORBIDDEN` (400 아님 → 권한이 입력 검증보다 먼저) |
+| Bob → Alice 글에 `authorId` 추가 필드 | 403 `FORBIDDEN` |
+| 403 전후 공개 조회 비교 | title·content·authorId·createdAt·updatedAt 모두 동일 |
+| Bob → 없는 글 수정 / 삭제 | 둘 다 404 `NOT_FOUND` |
+| 토큰 없이 → 없는 글 수정 / 삭제 | 둘 다 401 `TOKEN_REQUIRED` (404보다 인증이 먼저) |
+| Alice → 자기 글 공백 제목 | 400 `BAD_INPUT` |
+| Alice → 자기 글 수정 | 200, authorId 1 유지, createdAt 유지, updatedAt 변경 |
+| Bob 등록 + `authorId:1` / `userId:1` / `id:1` | 모두 400 `BAD_INPUT`, 글 수 1 → 1 (새 글 생성 안 됨) |
+| Bob 정상 등록 | 201, `authorId: 2`, `authorName: Bob` |
+| Alice → Bob 글 수정 | 403 `FORBIDDEN` |
+| Bob → 자기 글 수정 | 200 |
+| Alice → 자기 글 삭제 | 204, 이후 공개 조회 404 |
+| Bob → 자기 글 삭제 | 204 |
+
+**`python3 tools/check_api.py --mode final`** (기본 TTL 90, 토큰 가림)
+- `All 40 checks passed (final)`, 종료 코드 0.
+- BE-02 때 PASS 15건 대비 **새로 통과한 25건**:
+  - BE-03 때문에 통과: `Bob denied PUT`, `Bob denied DELETE`, `failed request leaves data unchanged` ×3
+  - BE-02 때는 403에서 멈춰 실행되지 않았던 항목: `no token DELETE`, `reject authorId`, `reject userId`, `input validation` ×4, `tampered GET /me`, `tampered POST /posts`, `tampered PUT /posts/{id}`, `tampered DELETE /posts/{id}`, `owner update`, `create post`(Bob), `Bob own update`, `missing protected PUT`, `missing protected DELETE`, `delete owned test post` ×2, `deleted post missing` ×2
+
+**`python3 tools/check_api.py --mode final --expiry`** (`TOKEN_TTL=3 npm start` 서버)
+- `All 48 checks passed (final)`, 종료 코드 0. TTL 3초 때문에 중간에 만료되는 일 없이 통과.
+- 만료 항목: `Waiting 4 seconds for expiration` 후 `expired GET /me`, `expired POST /posts`, `expired PUT /posts/{id}`, `expired DELETE /posts/{id}` 모두 PASS (401 `TOKEN_EXPIRED`).
+
+**정리**: 수동 시험 글 2개(id 5, 6)는 시험 안에서 삭제. `check_api.py` 두 번의 실행은 스스로 시험 글을 삭제(`delete owned test post` PASS). 각 실행 후 `GET /api/posts` → `[]`. 기본 서버와 TTL=3 서버 모두 종료, 8000·5173 포트 비어 있음 확인.
+
+### 미확인
+- 화면 동작: 프론트가 아직 토큰을 보내지 않음(FE-02 미구현). 화면에서 등록·수정·삭제는 401로 실패할 것으로 예상하지만 이번에 화면으로 확인하지 않음.
+- 서버 재시작 후 데이터 유지: 미확인.

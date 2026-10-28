@@ -64,5 +64,7 @@ export function currentUserId(req) {
   return user.id;
 }
 export function assertOwner(userId, authorId) {
-  // TODO BE-03: 다른 작성자이면 403 FORBIDDEN. 현재는 검사하지 않습니다.
+  // BE-03: 검증된 사용자 ID와 저장된 글의 작성자 ID가 다르면 403입니다.
+  if (userId !== authorId)
+    throw new ApiError(403, "FORBIDDEN", "본인이 작성한 글만 수정·삭제할 수 있습니다.");
 }
