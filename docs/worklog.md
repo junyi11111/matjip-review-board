@@ -79,3 +79,60 @@
 - 첫 커밋 방법: 보완한 `.gitignore`를 임시 보관 → 앞 9줄만 남긴 상태로 `git add -A` 후 `docs/worklog.md` 스테이징 해제 → 커밋 → 보완본 복원
 - 확인: 각 커밋 전 `git status --short`로 대상 확인, `git diff --cached --name-only`에서 `.env`, `node_modules`, `data/`, `dist/`, `*.sqlite` 검색 → 두 커밋 모두 해당 없음
 - 이 커밋 ID 기록은 세 번째 커밋 `docs: 커밋 ID 기록`으로 남김
+
+---
+
+## 2026-10-28 · 2단계: BE-01 로그인과 JWT 발급 (커밋 전)
+
+### 수정한 파일과 함수
+**1) `backend-express/src/auth.js` — `loadConfig()`(신규), 모듈 최상단 `config`, `issueToken(user)`**
+- 원래 역할: `issueToken`이 `501 NOT_IMPLEMENTED`를 던지는 자리표시 함수. 설정 검사 없음.
+- 변경 내용과 이유:
+  - `loadConfig()`를 추가해 모듈 로드(서버 시작) 시 한 번 실행. `JWT_SECRET`이 빈 값 / 제공 예시 값 / 64자리 16진수가 아니면 오류를 던져 시작을 거부한다(BE-01 요구). 오류 메시지에 키 값은 넣지 않는다.
+  - 통과한 키는 `Buffer.from(secret, "hex")`로 32바이트 키로 변환(명세 "사용 시 bytes로 변환").
+  - `TOKEN_TTL`이 양의 정수가 아니면 시작 거부, 기본 90. 이유: `app.js` 57행이 `expiresIn`을 `Number(process.env.TOKEN_TTL || 90)`로 따로 계산하므로, 잘못된 값이면 응답 `expiresIn`과 실제 `exp`가 어긋날 수 있다.
+  - `JWT_ISSUER`, `JWT_AUDIENCE`는 환경변수 우선, 없으면 `webservice-class`, `board-api`. 출처: `docs/02_API명세.md` 83~84행(JWT 설정과 검증 표), `.env.example` 5~6행.
+  - `issueToken`: 501 제거. `jsonwebtoken`(package.json에 9.0.3으로 이미 포함)의 `jwt.sign({}, key, {algorithm:"HS256", subject:String(user.id), issuer, audience, expiresIn:ttl})`. 페이로드를 빈 객체로 두고 옵션으로만 클레임을 넣어 비밀번호·해시·이메일이 토큰에 들어가지 않게 했다. 서명은 라이브러리 사용(직접 구현 없음).
+  - `currentUserId`, `assertOwner`(BE-02/03)는 수정하지 않음.
+- 출처: AI가 작성
+
+**2) `backend-express/.env.example` — 1행 주석**
+- 원래 역할: TODO 주석과 설정 예시(자리표시 키 포함).
+- 변경: TODO 주석을 키 생성 방법과 "자리표시자 그대로면 시작 거부" 안내 3줄로 교체. `JWT_SECRET` 값은 자리표시자 그대로 유지.
+- 출처: AI가 작성 (생성 명령은 `backend-express/README.md`의 명령과 같음)
+
+**3) `backend-express/.env` — 새 파일, git 제외**
+- `.env.example`의 설정 줄을 복사하고 `JWT_SECRET`만 `crypto.randomBytes(32)` 난수로 교체. 키는 화면·로그·문서에 출력하지 않고 파일에 바로 기록(권한 600).
+- 출처: AI가 생성 명령 실행
+
+**수정하지 않은 파일**: `app.js`(로그인 라우트가 이미 입력 검사 → `verifyCredentials` → `issueToken` 순서), `users.js`(제공 비밀번호 검증 그대로 사용), `errors.js`, `tools/check_api.py`, 프론트 전체.
+- 이메일 형식: 사용자 결정으로 `app.js`를 수정하지 않음. `"abc"`처럼 `@` 없는 문자열은 400이 아니라 401 INVALID_CREDENTIALS로 둔다.
+
+### 실제로 실행한 확인과 결과
+| 확인 | 방법 | 결과 |
+|---|---|---|
+| `.env` 키 형식 | Node로 64자리 hex 여부, 예시 값과 다른지 true/false만 출력 | `64hex: true`, `differs from example: true` |
+| `.env` git 제외 | `git check-ignore -v backend-express/.env` | `.gitignore:8:.env` 규칙으로 무시됨 |
+| `.env.example`에 실제 키 없음 | 실제 키 문자열로 `.env.example`과 프로젝트 전체(node_modules·.git·.env 제외) 검색 | 둘 다 없음. `.env.example` 4행은 자리표시자 |
+| 시작 거부: 빈 값 | `JWT_SECRET= node src/app.js` | exit 1, `JWT_SECRET이 비어 있습니다.` |
+| 시작 거부: 형식 오류 | `JWT_SECRET=abc node src/app.js` | exit 1, `64자리 16진수(32바이트)여야 합니다.` |
+| 시작 거부: 예시 값 | `JWT_SECRET=REPLACE_WITH_RANDOM_64_HEX_CHARACTERS node src/app.js` | exit 1, `제공 예시 값입니다.` |
+| 거부 메시지에 키 노출 | 위 3건 출력에서 시험 값과 실제 키 문자열 검색 | 모두 포함되지 않음 |
+| Alice 정상 로그인 | `curl POST /api/auth/login` | 200, `expiresIn: 90`, `user: {id:1, name:"Alice", email:"alice@class.test"}` |
+| 틀린 비밀번호 | 〃 | 401 `INVALID_CREDENTIALS` |
+| 없는 계정 | 〃 | 401 `INVALID_CREDENTIALS` |
+| `@` 없는 문자열 `"abc"` | 〃 | 401 `INVALID_CREDENTIALS` (결정대로) |
+| email 누락 / 숫자 / 공백만 / 추가 필드 / 깨진 JSON | 〃 | 모두 400 `BAD_INPUT` |
+| 토큰 구조 | base64url 디코드(Bob 로그인) | 세그먼트 3개, header `{alg:"HS256", typ:"JWT"}`, payload 키 `iat, exp, aud, iss, sub`, `sub`는 문자열 `"2"`, `iss=webservice-class`, `aud=board-api`, `exp-iat=90`, 비밀번호·해시·salt 키 없음 |
+| 서명 | `.env` 키로 `jwt.verify(algorithms:["HS256"], issuer, audience)` | 통과(sub=1). 다른 키로는 `invalid signature` |
+| 자체 검사 | `python3 tools/check_api.py --mode starter` | exit 1. PASS 6건(health, public list, bad ID, missing ID, wrong password, unknown email), `FAIL JWT intentionally unfinished: expected HTTP 501, got 200` |
+
+- **예상된 실패(시작 코드 상태를 검사하는 항목)**: starter 모드의 `JWT intentionally unfinished`는 정상 로그인이 501인지 검사한다. BE-01로 200이 되었으므로 실패가 맞다. 스크립트가 첫 실패에서 멈춰 그 뒤 starter 항목(create post, detail, update demo, bad input, no client author, delete)은 실행되지 않았다 → 이번 단계에서 미확인. `check_api.py`는 수정하지 않음.
+- 주의: 이 FAIL 메시지가 테스트 계정의 토큰 원문을 터미널에 출력했다. 90초 TTL로 이미 만료됐고 이 문서에는 옮기지 않았다.
+- 401 INVALID_CREDENTIALS 응답에도 `WWW-Authenticate: Bearer`가 붙는다(`app.js` 오류 미들웨어가 모든 401에 추가). 제공 코드 동작이며 이번에 바꾸지 않음.
+- 확인 후 백엔드 서버 종료.
+
+### 미확인
+- `--mode final` 검사 — BE-02/03 미구현이므로 실행하지 않음
+- `TOKEN_TTL` 변경(예: 3초) 시 `exp-iat`와 `expiresIn` 반영 — 미확인
+- 프론트 화면에서 로그인 — FE-01 미구현이므로 미확인
