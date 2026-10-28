@@ -1,5 +1,13 @@
-// TODO FE-01~04: 공통 API 명세와 구현 체크리스트를 보고 완성하세요.
 let session = { accessToken: "", user: null };
+// FE-03: 응답 code별 화면 안내. BAD_INPUT은 어느 칸이 문제인지 알려 주는 서버 문구를 씁니다.
+const MESSAGES = {
+  INVALID_CREDENTIALS: "이메일 또는 비밀번호가 올바르지 않습니다.",
+  TOKEN_REQUIRED: "로그인이 필요합니다. 로그인한 뒤 다시 시도하세요.",
+  INVALID_TOKEN: "로그인 정보가 올바르지 않습니다. 다시 로그인하세요.",
+  TOKEN_EXPIRED: "로그인 시간이 만료되었습니다. 다시 로그인하세요.",
+  FORBIDDEN: "본인이 작성한 후기만 수정·삭제할 수 있습니다.",
+  NOT_FOUND: "후기를 찾을 수 없습니다. 목록을 새로 불러왔습니다.",
+};
 export const getSession = () => session;
 export function clearSession() {
   session = { accessToken: "", user: null };
@@ -19,14 +27,19 @@ export async function request(path, options = {}) {
       ...options.headers,
     },
   });
-  const data = response.status === 204 ? null : await response.json();
+  // 204는 본문이 없으므로 파싱하지 않습니다. 본문이 JSON이 아닌 실패 응답도 null로 처리합니다.
+  const data =
+    response.status === 204 ? null : await response.json().catch(() => null);
   if (!response.ok) {
-    // TODO FE-03: 401이면 메모리의 로그인 상태도 해제하세요.
+    // FE-03: 401이면 메모리의 토큰·사용자를 지웁니다. 403은 로그인 상태를 유지합니다.
+    if (response.status === 401) clearSession();
     const error = new Error(
-      data.message || data.code || `HTTP ${response.status}`,
+      MESSAGES[data?.code] ||
+        data?.message ||
+        `요청을 처리하지 못했습니다. (HTTP ${response.status})`,
     );
     error.status = response.status;
-    error.code = data.code;
+    error.code = data?.code;
     throw error;
   }
   return data;
@@ -43,8 +56,8 @@ export async function login(email, password) {
   return data.user;
 }
 export function canEdit(post) {
-  // TODO FE-04: 로그인 사용자와 작성자를 비교하세요. 서버 검사도 반드시 필요합니다.
-  return true; // 시작 코드에서는 CRUD를 체험할 수 있도록 모두 표시합니다.
+  // FE-04: 로그인 사용자가 작성자일 때만 버튼을 보입니다. 최종 판단은 서버(403)가 합니다.
+  return session.user !== null && post.authorId === session.user.id;
 }
 export const api = {
   list: () => request("/posts"),

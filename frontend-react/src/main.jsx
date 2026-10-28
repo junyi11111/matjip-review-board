@@ -8,8 +8,8 @@ function App() {
   const [title, setTitle] = useState(""),
     [content, setContent] = useState(""),
     [editing, setEditing] = useState(null);
-  const [email, setEmail] = useState("alice@class.test"),
-    [password, setPassword] = useState("Classroom!2026");
+  const [email, setEmail] = useState(""),
+    [password, setPassword] = useState("");
   const [user, setUser] = useState(null),
     [message, setMessage] = useState("게시판을 불러오는 중입니다."),
     [busy, setBusy] = useState(false);
@@ -21,6 +21,12 @@ function App() {
       setMessage(success);
     } catch (e) {
       setMessage(e.message);
+      // FE-03: 404면 선택·수정 상태를 풀고 목록을 갱신합니다. 입력값은 지우지 않습니다.
+      if (e.status === 404) {
+        setSelected(null);
+        setEditing(null);
+        await refresh().catch(() => {});
+      }
     } finally {
       setUser(getSession().user);
       setBusy(false);
@@ -36,6 +42,10 @@ function App() {
   }
   async function save(e) {
     e.preventDefault();
+    if (!getSession().user) {
+      setMessage("후기를 쓰려면 먼저 로그인하세요.");
+      return;
+    }
     await run(async () => {
       const p = editing
         ? await api.update(editing, { title, content })
@@ -48,15 +58,13 @@ function App() {
   return (
     <main>
       <header>
-        <span className="eyebrow">WEB SERVICE DESIGN · STARTER</span>
-        <h1>우리의 기록</h1>
-        <p className="muted">
-          나만의 주제를 정하고, 로그인과 작성자 권한을 연결해 보세요.
-        </p>
+        <span className="eyebrow">WEB SERVICE DESIGN · 맛집 후기</span>
+        <h1>맛집 후기 게시판</h1>
+        <p className="muted">다녀온 맛집의 솔직한 후기를 나눠 보세요.</p>
       </header>
       <p className="banner">
-        시작 코드: 인증 미완성 · 글쓰기는 데모 작성자 Alice로 처리됩니다. 인증과
-        권한 검사를 완성한 뒤 안내 문구를 수정하세요.
+        후기는 누구나 읽을 수 있고, 작성은 로그인한 사용자만 할 수 있습니다.
+        수정·삭제는 작성자 본인만 가능합니다.
       </p>
       <div role="status" className="message">
         {message}
@@ -95,9 +103,11 @@ function App() {
                 <button
                   type="button"
                   className="secondary"
+                  disabled={!user}
                   onClick={() => {
                     clearSession();
                     setUser(null);
+                    reset();
                     setMessage("이 탭의 로그인 상태를 해제했습니다.");
                   }}
                 >
@@ -105,13 +115,6 @@ function App() {
                 </button>
               </div>
             </form>
-            <p>
-              <small>
-                테스트 계정: alice@class.test / bob@class.test
-                <br />
-                공통 비밀번호: Classroom!2026
-              </small>
-            </p>
             <button
               className="secondary"
               disabled={busy}
@@ -128,6 +131,9 @@ function App() {
           </section>
           <section className="card">
             <h2>{editing ? "게시글 수정" : "새 글 작성"}</h2>
+            {!user && (
+              <p className="muted">후기를 쓰려면 먼저 로그인하세요.</p>
+            )}
             <form onSubmit={save}>
               <label>
                 제목
@@ -148,7 +154,7 @@ function App() {
                 />
               </label>
               <div className="actions">
-                <button disabled={busy}>
+                <button disabled={busy || !user}>
                   {editing ? "수정 저장" : "등록"}
                 </button>
                 <button type="button" className="secondary" onClick={reset}>
@@ -164,7 +170,7 @@ function App() {
               게시글 목록 <small>{posts.length}개</small>
             </h2>
             {posts.length === 0 ? (
-              <p>첫 번째 기록을 남겨 보세요.</p>
+              <p>첫 번째 맛집 후기를 남겨 보세요.</p>
             ) : (
               posts.map((p) => (
                 <article className="post" key={p.id}>
