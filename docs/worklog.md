@@ -376,3 +376,6 @@
 - `npm run preview`(4173)로 빌드본 화면 전체 확인 — 빌드와 번들 문구 검색만 함
 - 백엔드 재시작 후 글·작성자·내용 유지 — 미확인
 - 원래 코드에서 JSON이 아닌 실패 응답 시 화면 문구 — 실행하지 않음(코드 분석만)
+
+### FE-03, FE-04 커밋
+- `feat(FE-03,FE-04): 응답 처리와 작성자별 버튼, 로그아웃 구현` — `fc0c5e047cac2ef403ba215f2c21af922c134d18` (`frontend-react/index.html`, `src/api.js`, `src/main.jsx`, worklog 6단계 기록. `.env`·`dist/`는 `git status --ignored`에서 `!!`로 제외 확인, 스테이징 diff에 실제 키·토큰 원문 없음 확인). 구현 단계(BE-01~03, FE-01~04) 완료.
