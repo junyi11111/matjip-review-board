@@ -60,7 +60,7 @@ function App() {
       <header>
         <span className="eyebrow">WEB SERVICE DESIGN · 맛집 후기</span>
         <h1>맛집 후기 게시판</h1>
-        <p className="muted">다녀온 맛집의 솔직한 후기를 나눠 보세요.</p>
+        <p className="muted">자신만의 맛집을 공유하세요!</p>
       </header>
       <p className="banner">
         후기는 누구나 읽을 수 있고, 작성은 로그인한 사용자만 할 수 있습니다.
@@ -130,7 +130,7 @@ function App() {
             </button>
           </section>
           <section className="card">
-            <h2>{editing ? "게시글 수정" : "새 글 작성"}</h2>
+            <h2>{editing ? "게시글 수정" : "후기 작성"}</h2>
             {!user && (
               <p className="muted">후기를 쓰려면 먼저 로그인하세요.</p>
             )}

@@ -379,3 +379,85 @@
 
 ### FE-03, FE-04 커밋
 - `feat(FE-03,FE-04): 응답 처리와 작성자별 버튼, 로그아웃 구현` — `fc0c5e047cac2ef403ba215f2c21af922c134d18` (`frontend-react/index.html`, `src/api.js`, `src/main.jsx`, worklog 6단계 기록. `.env`·`dist/`는 `git status --ignored`에서 `!!`로 제외 확인, 스테이징 diff에 실제 키·토큰 원문 없음 확인). 구현 단계(BE-01~03, FE-01~04) 완료.
+
+---
+
+## 2026-10-28 · 7단계: 빌드본 검증과 데이터 유지 확인 (코드 수정 없음)
+
+### 수정한 파일
+- 소스 코드 수정 없음. 이 기록만 추가. 출처: AI가 작성
+
+### 실제로 실행한 확인과 결과
+**빌드와 실행** (`frontend-react`)
+- `npm ci` 성공(fsevents install script 경고만) → `rm -rf dist && npm run build` 성공(`dist/index.html`, `assets/index-*.css`, `assets/index-*.js`), `dist/index.html`의 title "맛집 후기 게시판".
+- 백엔드 `npm start`(기본 TTL 90) + `npm run preview` → `http://127.0.0.1:4173/` 200 `text/html`.
+- 화면이 개발 소스(`/src/main.jsx`)가 아니라 빌드 결과(`/assets/index-*.js`, `/assets/index-*.css`)를 받는 것을 네트워크 기록으로 확인.
+
+**프록시** (`vite.config.js`의 `preview.proxy`)
+- 브라우저의 API 요청은 모두 `http://127.0.0.1:4173/api/...`로 나가고 응답 헤더 `X-Powered-By: Express`, 상태 코드 200/201/204가 백엔드 응답과 일치 → 4173 프록시가 8000 백엔드로 전달. 개발 모드(5173)와 같은 동작.
+- `curl http://127.0.0.1:4173/api/health` → 200 `{"status":"ok","stack":"express"}`.
+- 백엔드를 끈 동안 `4173/api/posts` → 502 (프록시가 백엔드에 의존함을 확인).
+
+**빌드본 화면 기능** (Playwright, `alert`/`confirm`은 시험 페이지에서만 대체, 토큰 앞부분만 기록)
+| 확인 | 요청 → 응답 | 결과 |
+|---|---|---|
+| 첫 로드 | GET /api/posts → 200 (Authorization 없음) | "로그아웃 상태" |
+| Alice 로그인 | POST /api/auth/login → 200 (헤더 없음) | "Alice님 로그인 중" |
+| Alice 후기 등록 | POST /api/posts → 201 (Bearer) | 저장 안내, 자기 글 수정 버튼 보임 |
+| 임시 글 등록 → 수정 → 삭제 | POST 201 → PUT /api/posts/22 200 → DELETE /api/posts/22 204 (모두 Bearer) | 수정 제목 반영, 삭제 후 목록에서 사라짐 |
+| Bob 로그인 → 후기 등록 | POST /api/auth/login 200 → POST /api/posts 201 | "Bob님 로그인 중" |
+| Bob이 Alice 후기 상세 | GET /api/posts/21 → 200 | 수정·삭제 버튼 없음 |
+| 로그아웃 버튼 | — | 즉시 "로그아웃 상태", 등록 비활성 |
+| Alice 로그인 후 새로고침 | GET /api/posts → 200 (Authorization 없음) | "로그아웃 상태"(메모리 토큰 해제, 정상) |
+| 새로고침 후 비로그인 상세 | GET /api/posts/23 → 200 (Authorization 없음) | "성수동 수제 파스타", 작성자 Bob, 수정 버튼 없음 |
+| 화면 문구 | — | STARTER·데모·`Classroom!2026`·`eyJ` 없음, 처리되지 않은 JS 오류 0건 |
+
+**데이터 유지**
+- `backend-express/data/board.sqlite` 존재(12288 bytes), 파일 헤더 `SQLite format 3`.
+- 재시작 전 글 2개 기록 → 백엔드 프로세스 종료(8000 응답 없음 확인) → 같은 폴더(`backend-express`)에서 `npm start` 재실행.
+- 재시작 전후 `GET /api/posts` 응답을 파일로 저장해 `cmp` 비교 → **완전히 동일**(id·작성자·제목·내용·createdAt·updatedAt).
+- 재시작 후 4173 화면 새로고침 → 목록에 두 글 그대로 표시.
+
+**남겨 둔 확인용 글** (사용자 요청으로 삭제하지 않음, 화면 캡처용)
+- id **21**: "을지로 노포 국밥집" — 작성자 Alice
+- id **23**: "성수동 수제 파스타" — 작성자 Bob
+- (id 22는 CRUD 시험용 임시 글로 화면에서 삭제)
+
+**종료하지 않은 서버** (사용자 요청): 백엔드 `127.0.0.1:8000`, 빌드본 preview `127.0.0.1:4173` 실행 중.
+
+### 발견한 점 (수정하지 않음)
+- 백엔드 시작 시 터미널 로그가 여전히 "게시판 시작 코드 http://127.0.0.1:8000 — 인증 TODO 미완성"이다(`app.js` `app.listen` 콜백, 0단계 목록의 항목). 화면에는 나오지 않지만 제출본에서는 문구 정리가 필요할 수 있음 — 수정 여부 미결정.
+
+### 미확인
+- 새 폴더에 clone한 뒤 README만으로 재현 — 아직 README 미작성, 미확인
+- `check_api.py --mode final`을 이번 빌드본 단계에서 다시 실행하지 않음(백엔드 코드 변경 없음, 직전 6단계에서 40건 통과)
+
+---
+
+## 2026-10-28 · 8단계: 시작 코드 안내 문구 제거와 화면 문구 정리
+
+### 수정한 파일과 함수
+**1) `backend-express/src/app.js` — `app.listen` 콜백의 시작 로그**
+- 원래 역할: 서버 시작 시 `게시판 시작 코드 http://127.0.0.1:8000 — 인증 TODO 미완성` 출력.
+- 변경: `맛집 후기 게시판 API — http://127.0.0.1:<PORT>`. 인증 구현이 끝났는데 미완성 안내가 남아 있어 교수자가 서버를 켤 때 오해할 수 있으므로 정리. 시작 실패 처리 로직은 그대로.
+- 출처: AI가 작성 (문구는 사용자 예시를 따름)
+
+**2) `frontend-react/src/main.jsx` — `App` 화면 문구**
+- 상단 소개: "다녀온 맛집의 솔직한 후기를 나눠 보세요." → "자신만의 맛집을 공유하세요!"
+- 작성 카드 제목: `editing ? "게시글 수정" : "새 글 작성"` → `"새 글 작성"`만 "후기 작성"으로. "게시글 수정", "게시글 목록"은 유지.
+- 서비스 이름, 안내 배너, 오류 문구는 변경 없음(사용자 지정).
+- 출처: AI 초안 후 사용자 수정 (6단계 AI 초안 문구를 사용자가 확정 문구로 지정)
+
+### 실제로 실행한 확인과 결과
+- 백엔드 재시작 로그: `맛집 후기 게시판 API — http://127.0.0.1:8000`
+- `rm -rf dist && npm run build` 성공 → `npm run preview`(4173) 화면: title "맛집 후기 게시판", 라벨 "WEB SERVICE DESIGN · 맛집 후기", h1 "맛집 후기 게시판", 소개 "자신만의 맛집을 공유하세요!", 배너 그대로, 카드 제목 `["로그인","후기 작성","게시글 목록 2개","게시글 상세"]`. 화면에 시작 코드·TODO·미완성·데모·STARTER·테스트 비밀번호 없음. 콘솔 오류는 favicon 404 1건.
+- 빌드 결과 검색: `dist`에 "자신만의 맛집을 공유하세요!", "후기 작성" 있음, "새 글 작성"·이전 소개 문구 없음.
+- `grep -rnE "시작 코드|TODO|미완성|데모|STARTER" backend-express frontend-react` (node_modules·data·package-lock 제외, dist 포함): 소스·빌드에는 없음. **남은 곳은 제공 README 2개뿐**:
+  - `backend-express/README.md:1` "# Express 백엔드 시작 코드"
+  - `frontend-react/README.md:1` "# React 프론트 시작 코드", `:12` "시작 코드는 공개 CRUD가 동작하지만 로그인은 미완성입니다."
+  - 제공 안내 문서라 이번에 수정하지 않음 — 제출 README 작성 때 처리 여부 결정 필요(미결정).
+- `python3 tools/check_api.py --mode final`: 40건 통과, exit 0.
+- 남겨 둔 글 id 21(Alice "을지로 노포 국밥집"), id 23(Bob "성수동 수제 파스타") 그대로 유지.
+
+### 커밋
+- 이 기록과 7단계(빌드본 검증·데이터 유지) 기록을 코드 변경과 함께 `fix: 시작 코드 안내 문구 제거와 화면 문구 정리`로 커밋(사용자 요청). 커밋 ID는 다음 기록에 남긴다.
