@@ -136,3 +136,7 @@
 - `--mode final` 검사 — BE-02/03 미구현이므로 실행하지 않음
 - `TOKEN_TTL` 변경(예: 3초) 시 `exp-iat`와 `expiresIn` 반영 — 미확인
 - 프론트 화면에서 로그인 — FE-01 미구현이므로 미확인
+
+### BE-01 커밋
+- `feat(BE-01): JWT 발급과 비밀 키 검사 구현` — `c7c2658425a20c1486621ab3bc5b380519ccf3cd` (`.env.example`, `auth.js`, worklog 2단계 기록. `.env`는 `git status --ignored`에서 `!!`로 제외 확인, 스테이징 diff에 실제 키 없음 확인)
+- 커밋 전 재확인(2026-10-28): `jwt.sign` 옵션 중복 여부 점검 → 중복 없음(`issuer`·`audience` 2회 출현은 `loadConfig` 반환 객체와 `jwt.sign` 옵션이 서로 다른 객체이기 때문), 파일 수정 없음. Alice 로그인 재실행 → 200, `sub="1"`, `iss=webservice-class`, `aud=board-api`, `exp-iat=90`.
