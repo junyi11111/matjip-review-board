@@ -563,3 +563,25 @@
 ### 미확인
 - `docs/report.pdf` — 아직 없음(사용자가 마지막에 추가 예정), GitHub에서 보고서 링크 열림 여부 미확인
 - 교수자 계정의 저장소 접근 권한(private이므로 collaborator 초대 필요 여부) — 미확인
+- 10단계 커밋: `docs: 제출 준비와 재현 테스트 기록` — `24ca57f5c91770fdee3bb11ba2db2f1cb4f29b64`
+
+---
+
+## 2026-10-28 · 11단계: 보고서 PDF 추가와 저장소 공개
+
+### 추가한 파일: `docs/report.pdf`
+- 사용자가 저장했다고 한 `docs/report.pdf`는 없었고, 23:53에 저장된 `~/Desktop/03보고서_202312906_박준이.pdf`(19쪽, 제목·학번·이름·저장소 URL 포함)가 있어 이 파일을 보고서로 판단.
+- push 전 검사: `pdftotext`로 추출한 텍스트에서 JWT 형태 문자열 0건, 실제 JWT_SECRET 0건, 64자리 hex 0건. `pdfimages -list` 결과 포함 이미지 0개.
+- 원본은 그대로 두고 `docs/report.pdf`로 복사(`cmp`로 동일 확인) → `docs: 보고서 PDF 추가` — `e40500a2100223921c33548380c033cadfee47c6`, push.
+- GitHub 확인(당시 private): contents API에서 `docs/report.pdf` 703,087 bytes, blob sha `6311dfa`가 로컬과 동일. 렌더링된 README의 링크가 `docs/report.pdf`를 가리키고, 그 경로로 내려받은 파일이 로컬과 동일. 비로그인 접근은 private이라 404.
+- 출처: 사용자 작성(보고서), 복사·커밋은 AI가 실행
+
+### 공개 전 점검 (커밋 18개 전체)
+- 히스토리에 등장한 파일 경로 47개 중 `.env`·`*.sqlite`·`node_modules/`·`dist/`·`data/` 없음(`.env.example`만 있음).
+- 전체 패치에서 실제 JWT_SECRET 0건, JWT 형태 문자열 0건, `eyJ`로 시작하는 긴 문자열 0건, 08 캡처에 보였던 토큰 조각 문자열 없음, 64자리 hex 0건.
+- PNG·PDF blob 17개(모든 버전)에 텍스트로 박힌 키·JWT 없음.
+- `03_me_Authorization헤더.png`, `08_curl_403.png`는 커밋된 버전이 각 1개(`559b24b`)이고, 가림을 확인한 현재 파일과 같음 → 가리기 전 버전은 히스토리에 없음.
+- 첫 시도에서 zsh 반복문 변수 이름 `path`가 실행 경로 변수(`PATH`)를 덮어써 바이너리 검사가 실패 → 변수 이름을 바꿔 다시 실행해 위 결과를 얻음.
+
+### 저장소 공개
+- 사용자 요청으로 이 기록을 커밋·push한 뒤 `gh repo edit --visibility public`으로 공개 전환. 공개 후 확인 결과와 최종 SHA는 채팅 보고에 정리(이 기록 자체가 마지막 커밋에 포함되므로 그 SHA는 여기에 적을 수 없음).
