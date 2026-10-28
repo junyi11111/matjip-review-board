@@ -100,6 +100,9 @@ app.use((error, req, res, next) => {
         ? 400
         : 500;
   if (status === 401) res.set("WWW-Authenticate", "Bearer");
+  // 예상하지 못한 오류는 응답에는 숨기고 서버 로그에만 남깁니다(요청 헤더·본문은 출력하지 않음).
+  if (status === 500)
+    console.error(`[500] ${req.method} ${req.path}`, error);
   res
     .status(status)
     .json({
