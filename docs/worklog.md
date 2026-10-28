@@ -140,3 +140,57 @@
 ### BE-01 커밋
 - `feat(BE-01): JWT 발급과 비밀 키 검사 구현` — `c7c2658425a20c1486621ab3bc5b380519ccf3cd` (`.env.example`, `auth.js`, worklog 2단계 기록. `.env`는 `git status --ignored`에서 `!!`로 제외 확인, 스테이징 diff에 실제 키 없음 확인)
 - 커밋 전 재확인(2026-10-28): `jwt.sign` 옵션 중복 여부 점검 → 중복 없음(`issuer`·`audience` 2회 출현은 `loadConfig` 반환 객체와 `jwt.sign` 옵션이 서로 다른 객체이기 때문), 파일 수정 없음. Alice 로그인 재실행 → 200, `sub="1"`, `iss=webservice-class`, `aud=board-api`, `exp-iat=90`.
+
+---
+
+## 2026-10-28 · 3단계: BE-02 토큰 검증과 /me (커밋 전)
+
+### 수정한 파일과 함수: `backend-express/src/auth.js` — `currentUserId(req)`, import 1줄
+- 원래 역할: TODO BE-02 주석과 함께 항상 데모 사용자 ID `1`을 반환. 토큰을 보지 않아 비로그인 상태에서도 글 작성·수정·삭제가 가능했다.
+- 변경 내용과 이유:
+  - `return 1` 제거. `Authorization` 헤더를 `/^Bearer\s+(\S+)$/i`로 확인하고, 없거나 형식이 다르면 401 `TOKEN_REQUIRED`. 인증 방식 이름(`Bearer`)은 HTTP 규칙상 대소문자를 구분하지 않으므로 `i` 플래그 사용.
+  - `jwt.verify(token, config.key, {algorithms:["HS256"], issuer, audience})`로 서명·알고리즘·만료·iss·aud 검증(decode 미사용). `TokenExpiredError` → 401 `TOKEN_EXPIRED`, 그 밖의 `JsonWebTokenError`(서명 오류·형식 오류·iss/aud 불일치·alg none 등) → 401 `INVALID_TOKEN`. JWT 오류가 아닌 예외는 다시 던져 500으로 드러나게 했다.
+  - `jsonwebtoken`은 exp가 없으면 만료 검사를 건너뛰므로 `typeof payload.exp === "number"`를 직접 확인. `sub`는 문자열이고 양의 정수 형태여야 한다. 아니면 401 `INVALID_TOKEN`.
+  - `users.js`의 `findPublic(Number(sub))`로 실제 계정 존재 확인(없으면 401 `INVALID_TOKEN`). 이를 위해 `import { findPublic } from "./users.js"` 추가. 검증된 숫자 ID만 반환.
+  - `assertOwner`(BE-03)는 수정하지 않음.
+- 출처: AI가 작성
+
+**수정하지 않은 파일**: `app.js`. `GET /api/me`는 이미 `currentUserId` → `findPublic`으로 `{id, name, email}`만 반환하고, 보호 라우트(POST/PUT/DELETE)는 첫 줄에서 `currentUserId`를 호출하며, 오류 미들웨어가 모든 401에 `WWW-Authenticate: Bearer`를 붙인다. 확인만 함. `tools/check_api.py`도 수정하지 않음.
+
+### 실제로 실행한 확인과 결과
+검증 스크립트(Node, 작업 폴더 밖 임시 파일)로 실행. 시험 토큰은 `.env` 키 또는 임의 키로 생성했고 키·토큰 원문은 출력하지 않음.
+
+| 요청 (`GET /api/me` 기준) | 결과 | WWW-Authenticate |
+|---|---|---|
+| 토큰 없음 | 401 `TOKEN_REQUIRED` | Bearer |
+| `Bearer` 없이 토큰만 | 401 `TOKEN_REQUIRED` | Bearer |
+| `Bearer ` 뒤 빈 값 | 401 `TOKEN_REQUIRED` | Bearer |
+| `Basic abc` | 401 `TOKEN_REQUIRED` | Bearer |
+| Alice 정상 토큰 | 200 `{"id":1,"name":"Alice","email":"alice@class.test"}` — 응답 키 `id, name, email`, password/hash/salt 키 없음 | — |
+| 서명 부분 변조 | 401 `INVALID_TOKEN` | Bearer |
+| payload 변조(sub=2, 서명 유지) | 401 `INVALID_TOKEN` | Bearer |
+| 다른 키로 서명 | 401 `INVALID_TOKEN` | Bearer |
+| iss 다름 / aud 다름 | 각각 401 `INVALID_TOKEN` | Bearer |
+| 없는 사용자 sub=999 | 401 `INVALID_TOKEN` | Bearer |
+| sub=`"abc"` / sub 숫자 타입 | 각각 401 `INVALID_TOKEN` | Bearer |
+| exp 없음(정상 서명) | 401 `INVALID_TOKEN` | Bearer |
+| alg=none / HS512 | 각각 401 `INVALID_TOKEN` | Bearer |
+| `bearer`(소문자) + 정상 토큰 | 200 Alice | — |
+| 토큰 없이 POST /posts, PUT /posts/1, DELETE /posts/1 | 모두 401 `TOKEN_REQUIRED` | Bearer |
+| `TOKEN_TTL=3 npm start` 후 로그인 | `expiresIn: 3`, `exp-iat = 3`, 발급 직후 /me 200 | — |
+| 5초 후 같은 토큰으로 /me, POST /posts | 둘 다 401 `TOKEN_EXPIRED` | Bearer |
+| 토큰 없이 GET /posts, GET /posts/3 | 둘 다 200 (Alice 토큰으로 만든 시험 글 id=3, `authorId: 1`, 201 + `Location: /api/posts/3`) | — |
+
+- 시험 글 id=3은 Alice 토큰으로 삭제(204), 이후 목록 `[]`.
+
+**`python3 tools/check_api.py --mode final`** (토큰은 가려서 확인)
+- PASS 15건: `health`, `public list`, `bad ID`, `missing ID`, `wrong password`, `unknown email`, `no token me`, `no token create`, `login alice@class.test`, `login bob@class.test`, `Alice me`, `Bob me`, `create post`, `public detail`, `no token PUT`
+- `FAIL Bob denied PUT: expected HTTP 403, got 200` → **예상된 실패(BE-03 미구현)**. `assertOwner`가 비어 있어 Bob 토큰으로 Alice 글이 실제로 수정되었다.
+- 스크립트가 남긴 시험 글 id=4(`Cleanup may be needed for post IDs: [4]`)를 Alice 토큰으로 삭제 → 204, 이후 `GET /posts/4` 404, 목록 `[]`.
+- 종료 코드: 실행 명령의 실수로 값을 받지 못함(출력란 공백). 스크립트 코드상 실패 시 `sys.exit(1)`.
+- 확인 후 기본 서버와 `TOKEN_TTL=3` 서버를 모두 종료, 8000·5173 포트 비어 있음 확인.
+
+### 영향과 미확인
+- 프론트는 아직 토큰을 보내지 않으므로(FE-02 미구현) **화면에서 글 등록·수정·삭제는 401로 실패한다**. 목록·상세 조회는 가능. 화면 동작은 미확인.
+- `--mode final --expiry`: 403 항목에서 만료 단계 전에 멈추므로 실행하지 않음 → 미확인(만료 동작은 위 수동 시험으로 확인).
+- `--mode starter`: 사용자 요청으로 다시 실행하지 않음.
