@@ -508,3 +508,58 @@
 
 ### 미확인
 - 사용자가 브라우저에서 200/201을 본 시점(폴더 이동 전이었는지) — 미확인
+- 9단계 커밋: `fix: 500 오류 로깅 추가` — `691db35e420709ca24fa84e24f95df09f378d8f4`
+
+---
+
+## 2026-10-28 · 10단계: 제출용 README, 테스트 증거, GitHub 업로드, 새 폴더 재현
+
+### T15 증거 출력 (코드 수정 없음)
+- 사용자 요청으로 백엔드를 SIGINT로 종료 → 같은 `backend-express` 폴더에서 `npm start` → 재시작 전후 `GET /api/posts`를 `diff`로 비교하는 스크립트를 실행(작업 폴더 밖 임시 파일). 결과 "재시작 전후 응답이 완전히 같습니다." 사용자가 같은 스크립트를 `!`로 직접 실행해 캡처(`docs/evidence/14`, `15`).
+- 사용자가 보낸 요청으로 생긴 34번 "Bob 테스트 글"은 사용자 확인 후 Bob 토큰으로 삭제(204, 이후 404).
+
+### 수정한 파일: `README.md` (루트)
+- 원래 역할: 과제 배포용 안내 문서.
+- 변경: `docs/06_제출용_README.md` 양식 순서대로 새로 작성해 덮어씀(사용자 지시). 서비스 소개(202312906 박준이), 실제 폴더 구조, 실행 환경(macOS 26.5.2, Node v26.8.2, Express 5.3.0, jsonwebtoken 9.0.3, dotenv 18.0.7, React 19.3.0, Vite 8.3.4, sql.js 1.14.2), clone·백엔드·프론트 명령, `.env` 생성과 JWT_SECRET 생성 방법(실제 키 없음), TOKEN_TTL, 테스트 계정, DB 위치·초기화·재시작 유지 결과, 구현 완료 범위, 알려진 한계, 테스트 요약(실제 실행 결과만), 핵심 구현, AI 활용 요약, 제출 확인 체크리스트.
+- 백엔드·프론트 실행 명령 부분은 사용자가 채팅에서 확인 후 승인.
+- 보고서 `docs/report.pdf`는 아직 없음 — 사용자가 보고서 완성 후 추가 예정(링크는 유지).
+- 참고 자료: 과제 제공 문서와 시작 코드만(사용자 확인).
+- 출처: AI 초안 후 사용자 확인
+
+### 추가한 파일: `docs/evidence/` 캡처 15장 (사용자 작성)
+- 커밋 전 15장을 모두 열어 확인. 1차 확인에서 `08_curl_403.png`(터미널 첫 줄에 JWT payload 일부와 서명 전체가 그대로 보임)와 `03_me_Authorization헤더.png`(가린 테두리 둘레로 글자 조각이 보임)를 발견해 커밋 전 중단하고 사용자에게 알림.
+- 사용자가 두 파일을 다시 가림 → 원본 해상도로 확대해 재확인. 03은 값 영역 완전 가림, 08은 2차에서 첫 줄이 남아 다시 알림 → 3차에서 첫 줄까지 가려진 것을 확인. 나머지 13장은 토큰 원문 없음(터미널 캡처는 `$A`, `$B`, `${TOKEN}XXXX` 변수만 사용).
+- PNG 파일 내용에서 `eyJ…` 패턴·실제 JWT_SECRET 문자열 검색: 없음.
+
+### 커밋 전 점검 결과
+- `git status`: `M README.md`, `?? docs/evidence/`(15장) → 커밋 대상 16개. `.env`·`node_modules`·`dist`·`data/`·`*.sqlite`는 `!!`(무시)로 대상 아님.
+- git 히스토리 전체(커밋 15개, 패치 약 858KB)에서 실제 JWT_SECRET 0건, JWT 형태 문자열 0건. 히스토리에 `.env`·DB·node_modules·dist·data 파일 없음.
+- `backend-fastapi`, `backend-spring`, `frontend-vue` 없음.
+- 첫 검색에서 `grep -c` 결과가 셸 변수로 비어 출력되어, node로 다시 세어 0건 확인.
+
+### 커밋과 업로드
+- `docs: 제출용 README와 테스트 증거 추가` — `559b24b18a3fd8adf6d9c74640c32ea3c08a44ec`
+- gh 2.100.0, `junyi11111` 계정 로그인(scope `repo` 포함) 확인 → `gh repo create matjip-review-board --private --source=. --remote=origin --push`.
+- 저장소: https://github.com/junyi11111/matjip-review-board (PRIVATE, 기본 브랜치 main). push 직후 원격 `main` SHA = 로컬 HEAD = `559b24b…`.
+
+### 새 폴더 재현 테스트 (README 명령만 사용)
+- 준비: 같은 포트를 쓰기 위해 기존 백엔드·preview 종료. 빈 폴더 `~/Desktop/clone-test`(항목 0개)에서 시작.
+| README 절 | 실행한 명령 | 결과 |
+|---|---|---|
+| 1 | `git clone https://github.com/junyi11111/matjip-review-board.git`, `cd matjip-review-board` | 성공, HEAD `559b24b…`, 템플릿 폴더 없음 |
+| 2 | `cd backend-express`, `npm ci` | 성공(81개 패키지, npm audit 안내만 표시) |
+| 2 | `cp .env.example .env` | `.env` 생성 |
+| 2 | `node -e "…randomBytes(32)…"` → `.env`의 `JWT_SECRET=` 교체 | 64자리 hex, 예시 값과 다름 확인. 키를 로그에 남기지 않으려고 출력을 화면에 표시하지 않고 바로 `.env`에 넣음(README의 수동 붙여넣기와 결과 동일) |
+| 2 | `npm start` | `맛집 후기 게시판 API — http://127.0.0.1:8000`, `data/board.sqlite` 자동 생성 |
+| 2 | `curl http://127.0.0.1:8000/api/health` | `{"status":"ok","stack":"express"}` HTTP 200 |
+| 3 | `cd frontend-react`, `npm ci` | 성공(종료 코드 0, fsevents install script 경고만) |
+| 3 | `npm run build` | vite v8.3.4, 16 modules, `built in 413ms` |
+| 3 | `npm run preview` | `Local: http://127.0.0.1:4173/` |
+| 확인 | `GET 4173/` / `4173/api/health` / `4173/api/posts` | 200 text/html, title "맛집 후기 게시판" / 200 health / 200 `[]`(새 DB) |
+| 확인 | 브라우저(4173): Alice 로그인 → 후기 등록 → 새로고침 | 로그인 200, 등록 201, 목록 1개, 새로고침 후 비로그인으로도 목록 1개, JS 오류 0건 |
+- README대로 했을 때 막힌 단계: 없음. JWT_SECRET 교체는 README가 명령이 아니라 "출력값으로 바꾼다"는 안내로 제시하는 수동 단계.
+- 정리: clone 서버 종료, `~/Desktop/clone-test` 삭제(존재하지 않음 확인). 원래 폴더에서 프론트 재빌드 후 백엔드(8000)·preview(4173) 재실행, 원래 DB 글 21·23·27·28 그대로.
+
+### 미확인
+- `docs/report.pdf` — 아직 없음(사용자가 마지막에 추가 예정), GitHub에서 보고서 링크 열림 여부 미확인
+- 교수자 계정의 저장소 접근 권한(private이므로 collaborator 초대 필요 여부) — 미확인
